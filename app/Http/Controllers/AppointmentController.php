@@ -20,13 +20,20 @@ class AppointmentController extends Controller
      */
     public function index(Request $request)
     {
+        $date = $request->query('date');
         $workshop_id = $request->query('workshop_id');
 
-        // By default, only return upcoming appointments
+        // By default, only return appointments from today onwards
         $current_datetime = Carbon::now();
         $current_date = $current_datetime->toDateString();
         $appointments = Appointment::whereDate('end_time', '>=', $current_date);
 
+        // Unless specified date, returns appointment on that date only
+        if ($request->has('date')) {
+            $appointments = Appointment::whereDate('start_time', $date);
+        }
+
+        // Filter appointment by workshop
         if ($request->has('workshop_id')) {
             $appointments->where('workshop_id', $workshop_id);
         }
