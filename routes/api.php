@@ -18,6 +18,7 @@ Route::middleware('auth:api')->get('/user', function (Request $request) {
     return $request->user();
 });
 
+Route::get('/appointments', [AppointmentController::class, 'index']);
 Route::get('/appointment/recommend', [AppointmentController::class, 'recommend']);
 Route::post('/appointment', [AppointmentController::class, 'store']);
-Route::get('/appointments', [AppointmentController::class, 'index']);
+

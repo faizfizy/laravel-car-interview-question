@@ -60,8 +60,34 @@ git format-patch develop
 
 # Answer
 
+## Assumptions & Limitations
+- Every workshop may only service one car at a time.
+- Every service duration will take about one hour time.
+- Workshop operating hours will always be within the same day.
+
 ## Setup
-- Please add GOOGLE_MAPS_API_KEY in the .env file if you want the distance to be calculated using Google Distance Matrix API
-- If no API_KEY is specified, the calculation will be using ...
+- Please define `GOOGLE_MAPS_API_KEY` in the .env file to calculate distance using Google Distance Matrix API. If no API_KEY is specified, the distance will be calculated using Haversine formula.
 
 ## Available Endpoints
+1. GET /appointments
+    - Parameters:
+      - `workshop_id` (Optional. If no value specified, it will return for all workshops)
+      - `date` (Optional. If no value specified, it will only return future appointments)
+
+2. POST /appointment
+     - Parameters:
+        - `car_id` (Required)
+        - `workshop_id` (Required)
+        - `start_time` (Required)
+        - `end_time` (Required)
+     - Note: `start_time` and `end_time` must be after current datetime. New appointment will not be allowed if it overlaps with existing appointment.
+    
+3. GET /appointment/recommend
+    - Parameters
+        - `car_id` (Required)
+        - `distance_calculation` (Optional. If not specified, it will use `google` if `GOOGLE_MAPS_API_KEY` is specified)
+          - `local` - Using Haversine formula
+          - `google` - Using Google Distance Matrix API
+    
+## Tests
+- No test provided

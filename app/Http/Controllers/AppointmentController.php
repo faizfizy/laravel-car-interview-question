@@ -9,6 +9,9 @@ use Carbon\Carbon;
 use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Psr7;
 use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
@@ -55,12 +58,19 @@ class AppointmentController extends Controller
         $end_time = $request->input('end_time');
 
         // ToDo: Input validation
+
+        $current_datetime = Carbon::now();
+        $new_start_time = Carbon::parse($start_time);
+        $new_end_time = Carbon::parse($end_time);
+
         // New appointment must be newer than current datetime
+        if ($new_start_time->lessThan($current_datetime)) {
+            return "Selected time is past. Please select newer date and time.";
+        }
 
         // Check if the slot is occupied, then disable to create appointment
         $appointments = Appointment::where('workshop_id', $workshop_id)->get();
-        $new_start_time = Carbon::parse($start_time);
-        $new_end_time = Carbon::parse($end_time);
+
         $booked = false;
         foreach ($appointments as $appointment) {
             $booked_start_time = Carbon::parse($appointment->start_time);
@@ -125,8 +135,19 @@ class AppointmentController extends Controller
 
     public function recommend(Request $request)
     {
-        $car_id = $request->query('car_id'); // ToDo: Create filter for this
-        $duration = $request->query('duration'); // hours
+        $car_id = $request->query('car_id'); // ToDo: Create filter options for this
+        $distance_calculation = $request->query('distance_calculation'); // 'local', 'google'
+
+        $local_calculation = true;
+        if ($request->has('distance_calculation')) {
+            if ($distance_calculation == 'google') {
+                $local_calculation = false;
+            }
+        } else {
+            if (!empty(config('app.google_api_key'))) {
+                $local_calculation = false;
+            }
+        }
 
         // Get the lat & long from car id
         $car = Car::find($car_id);
@@ -209,9 +230,7 @@ class AppointmentController extends Controller
             $result[$i] = [
                 'workshop_id' => $workshop->id,
                 'workshop_name' => $workshop->name,
-                'distance' => $this->calculateDistance($lat1, $long1, $lat2, $long2),
-//                'opening_datetime' => $opening_datetime->toDateTimeString(),
-//                'closing_datetime' => $closing_datetime->toDateTimeString(),
+                'distance' => $local_calculation ? $this->calculateDistance($lat1, $long1, $lat2, $long2) : $this->getDistance($lat1, $long1, $lat2, $long2),
                 'available_slots' => $available_slots,
                 ];
 
@@ -261,15 +280,29 @@ class AppointmentController extends Controller
         $google_api_key = config('app.google_api_key');
 
         $client = new Client();
-        $res = $client->request('GET', $base_uri, [
-            'query' => [
-                'key' => $google_api_key,
-                'origins' => $lat1 . ',' . $long1,
-                'destinations' => $lat2 . ',' . $long2,
-            ]
-        ]);
+        try {
+            $res = $client->request('GET', $base_uri, [
+                'query' => [
+                    'key' => $google_api_key,
+                    'origins' => $lat1 . ',' . $long1,
+                    'destinations' => $lat2 . ',' . $long2,
+                ]
+            ]);
+        } catch (RequestException $e) {
+            echo Psr7\Message::toString($e->getRequest());
+            if ($e->hasResponse()) {
+                echo Psr7\Message::toString($e->getResponse());
+            }
+        } catch (ConnectException $e) {
+            return "Connection Error";
+        }
 
         $response = json_decode($res->getBody(), true);
+
+        if ($response['status'] == 'REQUEST_DENIED') {
+            return $response['error_message'];
+        }
+
         $distant = $response['rows'][0]['elements'][0]['distance']['value'];
 
         return $distant;
