@@ -41,7 +41,21 @@ class AppointmentController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $car_id = $request->input('car_id');
+        $workshop_id = $request->input('workshop_id');
+        $start_time = $request->input('start_time');
+        $end_time = $request->input('end_time');
+
+        // ToDo: Input validation
+
+        $appointment = new Appointment;
+        $appointment->car_id = $car_id;
+        $appointment->workshop_id = $workshop_id;
+        $appointment->start_time = $start_time;
+        $appointment->end_time = $end_time;
+        $appointment->save();
+
+        return $appointment;
     }
 
     /**
@@ -105,8 +119,11 @@ class AppointmentController extends Controller
 
         $existing_appointments = Appointment
             ::whereDate('end_time', '>=', $current_date)
-            ->whereTime('end_time', '>=', $current_time)
+//            ->whereTime('end_time', '>=', $current_time)
             ->get();
+
+        // DEBUGGING
+//        dd($existing_appointments);
 
         $now = Carbon::now();
         $day_range = 5;
@@ -125,7 +142,7 @@ class AppointmentController extends Controller
             if ($now->greaterThan(Carbon::parse($workshop->closing_time))) {
                 $opening_datetime = Carbon::tomorrow()->add($opening_interval);
                 $closing_datetime = Carbon::tomorrow()->add($closing_interval)->addDays($day_range);
-            // Else if workshop still open,
+            // Else if workshop still open, ToDo:// Get the next current hour
             } else {
                 $opening_datetime = Carbon::today()->add($opening_interval);
                 $closing_datetime = Carbon::today()->add($closing_interval)->addDays($day_range);
@@ -140,13 +157,18 @@ class AppointmentController extends Controller
                 $slot_time = CarbonInterval::createFromFormat('H:i:s', $slot->toTimeString()); // Convert slot to CarbonInterval for time comparison
                 // If slots is within operating hours
                 if ($slot_time->greaterThanOrEqualTo($opening_interval) && $slot_time->lessThan($closing_interval))
-                 {
+                {
                     // Checks if slots is booked
                     $booked = false;
                     foreach ($existing_appointments as $appointment) {
                         $start_time = Carbon::parse($appointment->start_time);
                         $end_time = Carbon::parse($appointment->end_time);
                         $slot_end = Carbon::parse($slot->toDateTimeString())->add($slot_interval);
+
+                        // DEBUGGING
+//                        if ($workshop->id == $appointment->workshop_id) {
+//                            echo $slot->toDateTimeString() . " : " . $start_time . " - " . $end_time . "<br>";
+//                        }
 
                         if ($workshop->id == $appointment->workshop_id &&
                             (
@@ -184,7 +206,6 @@ class AppointmentController extends Controller
         // Check by availability
 
         // option to set based on priority or auto?
-
 
         // Set by closest location
 
