@@ -42,16 +42,6 @@ class AppointmentController extends Controller
     }
 
     /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
      * Store a newly created resource in storage.
      *
      * @param  \Illuminate\Http\Request  $request
@@ -65,6 +55,29 @@ class AppointmentController extends Controller
         $end_time = $request->input('end_time');
 
         // ToDo: Input validation
+        // New appointment must be newer than current datetime
+
+        // Check if the slot is occupied, then disable to create appointment
+        $appointments = Appointment::where('workshop_id', $workshop_id)->get();
+        $new_start_time = Carbon::parse($start_time);
+        $new_end_time = Carbon::parse($end_time);
+        $booked = false;
+        foreach ($appointments as $appointment) {
+            $booked_start_time = Carbon::parse($appointment->start_time);
+            $booked_end_time = Carbon::parse($appointment->end_time);
+
+            if (
+                ($new_start_time->betweenIncluded($booked_start_time, $booked_end_time) || $new_end_time->betweenIncluded($booked_start_time, $booked_end_time)) ||
+                ($booked_start_time->betweenIncluded($new_start_time, $new_end_time) || $booked_end_time->betweenIncluded($new_start_time, $new_end_time))
+            )
+            {
+                $booked = true;
+            }
+        }
+
+        if ($booked) {
+            return response()->json('Slot is already booked. Please select different slot');
+        }
 
         $appointment = new Appointment;
         $appointment->car_id = $car_id;
@@ -83,17 +96,6 @@ class AppointmentController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function show(Appointment $appointment)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  \App\Appointment  $appointment
-     * @return \Illuminate\Http\Response
-     */
-    public function edit(Appointment $appointment)
     {
         //
     }

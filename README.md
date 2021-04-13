@@ -57,3 +57,11 @@ git format-patch develop
 ```
 
 4. Send the patch file back to us
+
+# Answer
+
+## Setup
+- Please add GOOGLE_MAPS_API_KEY in the .env file if you want the distance to be calculated using Google Distance Matrix API
+- If no API_KEY is specified, the calculation will be using ...
+
+## Available Endpoints
