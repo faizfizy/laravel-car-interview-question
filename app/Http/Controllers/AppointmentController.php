@@ -1,0 +1,233 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Appointment;
+use App\Car;
+use App\Workshop;
+use Carbon\Carbon;
+use Carbon\CarbonInterval;
+use Carbon\CarbonPeriod;
+use GuzzleHttp\Client;
+use Illuminate\Http\Request;
+
+class AppointmentController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function index()
+    {
+        //
+    }
+
+    /**
+     * Show the form for creating a new resource.
+     *
+     * @return \Illuminate\Http\Response
+     */
+    public function create()
+    {
+        //
+    }
+
+    /**
+     * Store a newly created resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function store(Request $request)
+    {
+        //
+    }
+
+    /**
+     * Display the specified resource.
+     *
+     * @param  \App\Appointment  $appointment
+     * @return \Illuminate\Http\Response
+     */
+    public function show(Appointment $appointment)
+    {
+        //
+    }
+
+    /**
+     * Show the form for editing the specified resource.
+     *
+     * @param  \App\Appointment  $appointment
+     * @return \Illuminate\Http\Response
+     */
+    public function edit(Appointment $appointment)
+    {
+        //
+    }
+
+    /**
+     * Update the specified resource in storage.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \App\Appointment  $appointment
+     * @return \Illuminate\Http\Response
+     */
+    public function update(Request $request, Appointment $appointment)
+    {
+        //
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param  \App\Appointment  $appointment
+     * @return \Illuminate\Http\Response
+     */
+    public function destroy(Appointment $appointment)
+    {
+        //
+    }
+
+    public function recommend(Request $request)
+    {
+        $car_id = $request->query('car_id'); // ToDo: Create filter for this
+        $duration = $request->query('duration'); // hours
+
+        // Get the lat & long from car id
+        $car = Car::find($car_id);
+        $lat1 = $car->latitude;
+        $long1 = $car->longitude;
+
+        $current_datetime = Carbon::now();
+        $current_date = $current_datetime->toDateString();;
+        $current_time = $current_datetime->toTimeString();;
+
+        $existing_appointments = Appointment
+            ::whereDate('end_time', '>=', $current_date)
+            ->whereTime('end_time', '>=', $current_time)
+            ->get();
+
+        $now = Carbon::now();
+        $day_range = 5;
+        $slot_interval = '1 hour';
+        $result = [];
+
+        $workshops = Workshop::all();
+        foreach ($workshops as $i => $workshop) {
+            $lat2 = $workshop->latitude;
+            $long2 = $workshop->longitude;
+
+            $opening_interval = CarbonInterval::createFromFormat('H:i:s', $workshop->opening_time);
+            $closing_interval = CarbonInterval::createFromFormat('H:i:s', $workshop->closing_time);
+
+            // If workshop is closed for today,
+            if ($now->greaterThan(Carbon::parse($workshop->closing_time))) {
+                $opening_datetime = Carbon::tomorrow()->add($opening_interval);
+                $closing_datetime = Carbon::tomorrow()->add($closing_interval)->addDays($day_range);
+            // Else if workshop still open,
+            } else {
+                $opening_datetime = Carbon::today()->add($opening_interval);
+                $closing_datetime = Carbon::today()->add($closing_interval)->addDays($day_range);
+            }
+
+            // Define slots using Carbon period
+            $slots = CarbonPeriod::create($opening_datetime, $slot_interval, $closing_datetime);
+
+            // Remove slots outside operation hours
+            $open_slots = [];
+            foreach ($slots as $slot) {
+                // If workshop is open
+                if ($slot->hour >= $opening_interval->h && $slot->hour < $closing_interval->h) {
+                    $open_slots[] = $slot;
+                }
+            }
+
+            // available slots = open slots - booked slots
+            $available_slots = [];
+            foreach ($open_slots as $slot) {
+                $booked = false;
+                foreach ($existing_appointments as $appointment) {
+                    $start_time = Carbon::parse($appointment->start_time);
+                    $end_time = Carbon::parse($appointment->end_time);
+                    if (($slot->isSameDay($start_time) && $slot->hour == $start_time->hour && $workshop->id == $appointment->workshop_id)) {
+                        $booked = true;
+                    }
+                }
+                if (!$booked) {
+                    $available_slots[] = $slot->toDateTimeString();
+                }
+            }
+
+
+            $result[$i] = [
+                'workshop_id' => $workshop->id,
+                'workshop_name' => $workshop->name,
+                'distance' => $this->calculateDistance($lat1, $long1, $lat2, $long2),
+//                'opening_datetime' => $opening_datetime->toDateTimeString(),
+//                'closing_datetime' => $closing_datetime->toDateTimeString(),
+                'available_slots' => $available_slots,
+                ];
+
+            // To get faster result sort when appending the result
+        }
+
+        // Sort result by distance
+        usort($result, function($a, $b) {
+            return $a['distance'] <=> $b['distance'];
+        });
+
+        // Check by availability
+
+        // option to set based on priority or auto?
+
+
+        // Set by closest location
+
+
+        return response()->json($result);
+    }
+
+    function calculateDistance($lat1, $long1, $lat2, $long2)
+    {
+        $lat1 = deg2rad($lat1);
+        $long1 = deg2rad($long1);
+        $lat2 = deg2rad($lat2);
+        $long2 = deg2rad($long2);
+
+        //
+        $dlong = $long2 - $long1;
+        $dlati = $lat2 - $lat1;
+
+        $val = pow(sin($dlati/2),2)+cos($lat1)*cos($lat2)*pow(sin($dlong/2),2);
+
+        $res = 2 * asin(sqrt($val));
+
+        $earth_radius = 3958.756;
+
+        return ($res*$earth_radius);
+    }
+
+    // Returns distance in metres
+    // ToDo: Handles if return error
+    function getDistance($lat1, $long1, $lat2, $long2)
+    {
+        $base_uri = 'https://maps.googleapis.com/maps/api/distancematrix/json';
+        $google_api_key = config('app.google_api_key');
+
+        $client = new Client();
+        $res = $client->request('GET', $base_uri, [
+            'query' => [
+                'key' => $google_api_key,
+                'origins' => $lat1 . ',' . $long1,
+                'destinations' => $lat2 . ',' . $long2,
+            ]
+        ]);
+
+        $response = json_decode($res->getBody(), true);
+        $distant = $response['rows'][0]['elements'][0]['distance']['value'];
+
+        return $distant;
+    }
+
+}
