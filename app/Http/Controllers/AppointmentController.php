@@ -8,6 +8,7 @@ use App\Workshop;
 use Carbon\Carbon;
 use Carbon\CarbonInterval;
 use Carbon\CarbonPeriod;
+use Illuminate\Support\Facades\Validator;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\RequestException;
@@ -57,7 +58,16 @@ class AppointmentController extends Controller
         $start_time = $request->input('start_time');
         $end_time = $request->input('end_time');
 
-        // ToDo: Input validation
+        $validate = Validator::make($request->all(), [
+            'car_id' => 'required',
+            'workshop_id' => 'required',
+            'start_time' => 'required|date_format:Y-m-d H:i:s',
+            'end_time' => 'required|date_format:Y-m-d H:i:s',
+        ]);
+
+        if ($validate->fails()) {
+            return response()->json($validate->messages(), 422);
+        }
 
         $current_datetime = Carbon::now();
         $new_start_time = Carbon::parse($start_time);
@@ -65,7 +75,7 @@ class AppointmentController extends Controller
 
         // New appointment must be newer than current datetime
         if ($new_start_time->lessThan($current_datetime)) {
-            return "Selected time is past. Please select newer date and time.";
+            return response()->json(['error' => 'Date or time is invalid. Please select newer date and time.']);
         }
 
         // Check if the slot is occupied, then disable to create appointment
@@ -86,9 +96,10 @@ class AppointmentController extends Controller
         }
 
         if ($booked) {
-            return response()->json('Slot is already booked. Please select different slot');
+            return response()->json(['error' => 'Slot is already booked. Please select different date and time']);
         }
 
+        // ToDo: Automatically calculate end time
         $appointment = new Appointment;
         $appointment->car_id = $car_id;
         $appointment->workshop_id = $workshop_id;
@@ -163,9 +174,6 @@ class AppointmentController extends Controller
 //            ->whereTime('end_time', '>=', $current_time)
             ->get();
 
-        // DEBUGGING
-//        dd($existing_appointments);
-
         $now = Carbon::now();
         $day_range = 5;
         $slot_interval = '1 hour';
@@ -206,11 +214,6 @@ class AppointmentController extends Controller
                         $end_time = Carbon::parse($appointment->end_time);
                         $slot_end = Carbon::parse($slot->toDateTimeString())->add($slot_interval);
 
-                        // DEBUGGING
-//                        if ($workshop->id == $appointment->workshop_id) {
-//                            echo $slot->toDateTimeString() . " : " . $start_time . " - " . $end_time . "<br>";
-//                        }
-
                         if ($workshop->id == $appointment->workshop_id &&
                             (
                                 ($start_time->greaterThanOrEqualTo($slot) && $start_time->lessThan($slot_end)) ||
@@ -234,7 +237,7 @@ class AppointmentController extends Controller
                 'available_slots' => $available_slots,
                 ];
 
-            // To get faster result sort when appending the result
+            // To get faster result, can try sort when appending the result
         }
 
         // Sort result by distance
@@ -242,16 +245,11 @@ class AppointmentController extends Controller
             return $a['distance'] <=> $b['distance'];
         });
 
-        // Check by availability
-
-        // option to set based on priority or auto?
-
-        // Set by closest location
-
 
         return response()->json($result);
     }
 
+    // Return distance in metres
     function calculateDistance($lat1, $long1, $lat2, $long2)
     {
         $lat1 = deg2rad($lat1);
@@ -259,21 +257,19 @@ class AppointmentController extends Controller
         $lat2 = deg2rad($lat2);
         $long2 = deg2rad($long2);
 
-        //
-        $dlong = $long2 - $long1;
+        // Delta
         $dlati = $lat2 - $lat1;
+        $dlong = $long2 - $long1;
 
         $val = pow(sin($dlati/2),2)+cos($lat1)*cos($lat2)*pow(sin($dlong/2),2);
-
         $res = 2 * asin(sqrt($val));
 
-        $earth_radius = 3958.756;
+        $earth_radius = 6371000;
 
         return ($res*$earth_radius);
     }
 
-    // Returns distance in metres
-    // ToDo: Handles if return error
+    // Return distance in metres
     function getDistance($lat1, $long1, $lat2, $long2)
     {
         $base_uri = 'https://maps.googleapis.com/maps/api/distancematrix/json';

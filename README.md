@@ -80,14 +80,18 @@ git format-patch develop
         - `workshop_id` (Required)
         - `start_time` (Required)
         - `end_time` (Required)
-     - Note: `start_time` and `end_time` must be after current datetime. New appointment will not be allowed if it overlaps with existing appointment.
-    
+     - Note: 
+       - `start_time` and `end_time` must be after current datetime
+       - New appointment will not be allowed if it overlaps with existing appointment
+       - If new appointment is successfully created, it will return the appointment details
 3. GET /appointment/recommend
     - Parameters
         - `car_id` (Required)
         - `distance_calculation` (Optional. If not specified, it will use `google` if `GOOGLE_MAPS_API_KEY` is specified)
           - `local` - Using Haversine formula
           - `google` - Using Google Distance Matrix API
+    - Note:
+        - Distance will always be return in `metres`
     
 ## Tests
 - No test provided
