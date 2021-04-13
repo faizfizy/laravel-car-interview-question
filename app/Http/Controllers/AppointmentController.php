@@ -131,34 +131,38 @@ class AppointmentController extends Controller
                 $closing_datetime = Carbon::today()->add($closing_interval)->addDays($day_range);
             }
 
-            // Define slots using Carbon period
+            // Define slots using CarbonPeriod
             $slots = CarbonPeriod::create($opening_datetime, $slot_interval, $closing_datetime);
 
-            // Remove slots outside operation hours
-            $open_slots = [];
-            foreach ($slots as $slot) {
-                // If workshop is open
-                if ($slot->hour >= $opening_interval->h && $slot->hour < $closing_interval->h) {
-                    $open_slots[] = $slot;
-                }
-            }
-
-            // available slots = open slots - booked slots
+            // Remove slots outside operation hours & booked slots
             $available_slots = [];
-            foreach ($open_slots as $slot) {
-                $booked = false;
-                foreach ($existing_appointments as $appointment) {
-                    $start_time = Carbon::parse($appointment->start_time);
-                    $end_time = Carbon::parse($appointment->end_time);
-                    if (($slot->isSameDay($start_time) && $slot->hour == $start_time->hour && $workshop->id == $appointment->workshop_id)) {
-                        $booked = true;
+            foreach ($slots as $slot) {
+                $slot_time = CarbonInterval::createFromFormat('H:i:s', $slot->toTimeString()); // Convert slot to CarbonInterval for time comparison
+                // If slots is within operating hours
+                if ($slot_time->greaterThanOrEqualTo($opening_interval) && $slot_time->lessThan($closing_interval))
+                 {
+                    // Checks if slots is booked
+                    $booked = false;
+                    foreach ($existing_appointments as $appointment) {
+                        $start_time = Carbon::parse($appointment->start_time);
+                        $end_time = Carbon::parse($appointment->end_time);
+                        $slot_end = Carbon::parse($slot->toDateTimeString())->add($slot_interval);
+
+                        if ($workshop->id == $appointment->workshop_id &&
+                            (
+                                ($start_time->greaterThanOrEqualTo($slot) && $start_time->lessThan($slot_end)) ||
+                                ($end_time->greaterThan($slot) && $end_time->lessThan($slot_end))
+                            ) ||
+                            ($start_time->lessThanOrEqualTo($slot) && $end_time->greaterThanOrEqualTo($slot_end))
+                        ) {
+                            $booked = true;
+                        }
+                    }
+                    if (!$booked) {
+                        $available_slots[] = $slot->toDateTimeString();
                     }
                 }
-                if (!$booked) {
-                    $available_slots[] = $slot->toDateTimeString();
-                }
             }
-
 
             $result[$i] = [
                 'workshop_id' => $workshop->id,
