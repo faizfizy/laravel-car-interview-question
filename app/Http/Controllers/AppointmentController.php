@@ -18,9 +18,20 @@ class AppointmentController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
-        //
+        $workshop_id = $request->query('workshop_id');
+
+        // By default, only return upcoming appointments
+        $current_datetime = Carbon::now();
+        $current_date = $current_datetime->toDateString();
+        $appointments = Appointment::whereDate('end_time', '>=', $current_date);
+
+        if ($request->has('workshop_id')) {
+            $appointments->where('workshop_id', $workshop_id);
+        }
+
+        return $appointments->paginate();
     }
 
     /**
